@@ -1,0 +1,79 @@
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+import base64
+
+# --- Cellular Automaton for AES Key Generation ---
+
+def rule30(left, center, right):
+    return left ^ (center or right)
+
+def generate_ca_key(seed, steps=128):
+    # Convert seed (binary string) to a list of integers
+    state = [int(bit) for bit in seed]
+    key_bits = []
+
+    for _ in range(steps):
+        next_state = []
+        for i in range(len(state)):
+            left = state[i - 1] if i > 0 else 0
+            center = state[i]
+            right = state[i + 1] if i < len(state) - 1 else 0
+            new_bit = rule30(left, center, right)
+            next_state.append(new_bit)
+            key_bits.append(new_bit)
+            if len(key_bits) >= 128:
+                break
+        state = next_state
+        if len(key_bits) >= 128:
+            break
+
+    # Convert bit list to bytes
+    key_bytes = bytearray()
+    for i in range(0, 128, 8):
+        byte = int(''.join(str(bit) for bit in key_bits[i:i+8]), 2)
+        key_bytes.append(byte)
+
+    return bytes(key_bytes)
+
+# --- AES Helper Functions ---
+
+def pad(text):
+    padding_length = 16 - len(text) % 16
+    return text + chr(padding_length) * padding_length
+
+def unpad(text):
+    padding_length = ord(text[-1])
+    return text[:-padding_length]
+
+def encrypt_aes(key, plaintext):
+    plaintext = pad(plaintext).encode()
+    cipher = AES.new(key, AES.MODE_CBC)
+    ct_bytes = cipher.encrypt(plaintext)
+    iv = cipher.iv
+    ciphertext = base64.b64encode(iv + ct_bytes).decode()
+    return ciphertext
+
+def decrypt_aes(key, ciphertext):
+    ciphertext = base64.b64decode(ciphertext)
+    iv = ciphertext[:16]
+    ct = ciphertext[16:]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    plaintext = unpad(cipher.decrypt(ct).decode())
+    return plaintext
+
+# --- Usage ---
+
+# Binary seed string for CA
+seed = '1100101011110001'  # Can be random, must be enough bits (e.g., 16)
+
+# Generate dynamic key using CA
+key = generate_ca_key(seed)
+
+# Encrypt/Decrypt
+plaintext = "Hello from cellular AES!"
+encrypted = encrypt_aes(key, plaintext)
+decrypted = decrypt_aes(key, encrypted)
+
+print("Generated Key:", key.hex())
+print("Encrypted:", encrypted)
+print("Decrypted:", decrypted)
